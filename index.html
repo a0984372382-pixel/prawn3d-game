@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#061c2b">
+<title>蝦境・3D 釣蝦模擬器</title>
+<style>
+:root{--bg:#061c2b;--panel:rgba(5,24,38,.86);--line:rgba(125,220,230,.25);--cyan:#79edf0;--gold:#ffc96c;--muted:#9ab8c4}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:#f0fbff;font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif;touch-action:manipulation}
+#scene{position:fixed;inset:0}canvas{display:block}
+.vignette{position:fixed;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(2,12,22,.52),transparent 26%,transparent 58%,rgba(2,12,22,.5))}
+.top{position:fixed;top:env(safe-area-inset-top,8px);left:12px;right:12px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;pointer-events:none}
+.brand,.stat,.panel,.hint,.toast{background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 28px #00121e55}
+.brand{padding:10px 13px;border-radius:15px}.brand b{display:block;font-size:16px;letter-spacing:2px}.brand small{font-size:10px;color:var(--muted);letter-spacing:1px}
+.stats{display:flex;gap:6px}.stat{border-radius:12px;padding:8px 10px;min-width:65px;text-align:center}.stat small{display:block;color:var(--muted);font-size:10px}.stat strong{font-size:15px;color:var(--cyan)}
+.panel{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,8px) + 10px);border-radius:20px;padding:12px}
+.row{display:flex;gap:8px;align-items:center}.row+.row{margin-top:9px}.grow{flex:1;min-width:0}
+.status{font-size:12px;color:var(--cyan);font-weight:700}.sub{font-size:11px;color:var(--muted);line-height:1.45}
+button,select{font:inherit;color:#f0fbff;background:#102f41;border:1px solid #326075;border-radius:12px;padding:11px 10px;min-height:42px}
+button{cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}button:active{transform:scale(.98)}button.primary{background:linear-gradient(135deg,#68e5e8,#2ca5b6);border:0;color:#03212b;font-weight:800}button.gold{background:linear-gradient(135deg,#ffe0a0,#e9a846);border:0;color:#332006;font-weight:800}button:disabled{opacity:.45}
+.actions button{flex:1;font-weight:700}.meter{height:8px;background:#0b1722;border-radius:20px;overflow:hidden;border:1px solid #284757}.meter span{display:block;height:100%;width:20%;background:linear-gradient(90deg,#59e0ce,#ffce67,#ff5e65);transition:width .12s}
+.floatline{display:flex;justify-content:space-between;gap:8px;align-items:center}.floatline .sub{flex:1}
+select{max-width:48%;padding:8px;font-size:12px}
+.hint{position:fixed;top:95px;left:50%;transform:translateX(-50%);padding:8px 13px;border-radius:99px;font-size:11px;color:#d8f9ff;white-space:nowrap;pointer-events:none}
+.toast{position:fixed;top:132px;left:50%;transform:translateX(-50%);padding:10px 14px;border-radius:13px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}.toast.show{opacity:1}
+.modal{position:fixed;inset:0;background:#020b12bb;display:none;align-items:center;justify-content:center;padding:20px;z-index:5}.modal.open{display:flex}.modalcard{width:min(440px,100%);max-height:80vh;overflow:auto;background:#081e2d;border:1px solid var(--line);border-radius:20px;padding:18px}.modalcard h2{margin:0 0 12px;font-size:18px}.modalcard p{color:#b8d1dc;font-size:13px}.catchrow{display:flex;justify-content:space-between;border-bottom:1px solid #244252;padding:10px 0;font-size:13px}.modalfoot{display:flex;gap:8px;margin-top:14px}.modalfoot button{flex:1}
+#bitePulse{position:fixed;inset:0;border:0 solid #ffdc79;pointer-events:none;transition:border-width .15s}
+@media(min-width:700px){.panel{left:auto;right:20px;bottom:20px;width:370px}.top{left:20px;right:20px}.hint{top:105px}.brand b{font-size:19px}}
+</style>
+</head>
+<body>
+<div id="scene"></div><div class="vignette"></div><div id="bitePulse"></div>
+<div class="top">
+ <div class="brand"><b>蝦境 <span style="color:var(--cyan)">PRAWN REALM</span></b><small>3D 蝦池模擬 · 原創試玩版</small></div>
+ <div class="stats">
+  <div class="stat"><small>本場漁獲</small><strong id="count">0 尾</strong></div>
+  <div class="stat"><small>總重量</small><strong id="weight">0 g</strong></div>
+ </div>
+</div>
+<div class="hint" id="hint">拖曳旋轉視角 · 點「拋竿」開始</div>
+<div class="toast" id="toast"></div>
+<div class="panel">
+ <div class="row floatline">
+  <div class="grow"><div class="status" id="status">準備就緒 · 蝦池水面平穩</div><div class="sub" id="desc">觀察浮標，出現訊號後抓準時機揚竿。</div></div>
+  <button id="farmBtn">養殖</button><button id="gearBtn">裝備</button><button id="logBtn">漁獲</button>
+ </div>
+ <div class="row">
+  <div class="grow"><div class="floatline"><span class="sub">搏蝦拉力</span><span class="sub" id="tensionText">安全</span></div><div class="meter"><span id="tensionBar"></span></div></div>
+  <button id="reelBtn" disabled>收線</button>
+ </div>
+ <div class="row actions">
+  <button class="primary" id="castBtn">🎣 拋竿</button>
+  <button id="jigBtn" disabled>輕提逗蝦</button>
+  <button class="gold" id="strikeBtn" disabled>⚡ 揚竿</button>
+ </div>
+</div>
+<div class="modal" id="modal"><div class="modalcard"><h2 id="modalTitle">裝備配置</h2><div id="modalBody"></div><div class="modalfoot"><button id="closeModal">關閉</button><button class="primary" id="saveGear">套用裝備</button></div></div></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const $=id=>document.getElementById(id);
+const state={phase:'idle',catchCount:0,totalWeight:0,catches:[],castAt:0,biteAt:0,biteType:'',tension:0,fish:null,rod:'中硬調 6/4',line:'尼龍 1.5 號',float:'敏感長標',bait:'赤尾青',sound:true,score:0,waitingTimer:null, fightTimer:null};
+const saved=(()=>{try{return JSON.parse(localStorage.getItem('prawnRealmSave')||'{}')}catch(e){return {}}})();
+if(saved.catches){state.catches=saved.catches;state.catchCount=state.catches.length;state.totalWeight=state.catches.reduce((s,c)=>s+c.weight,0)}
+if(saved.gear)Object.assign(state,saved.gear);
+if(saved.farm)state.farm=Object.assign(state.farm,saved.farm);
+let scene,camera,renderer,clock,water,waterMat,rodGroup,lineObj,floatObj,shrimpGroup=[],particles=[],dragging=false,lastX=0,lastY=0,rotY=0.25,rotX=0.18,raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),audioCtx=null;
+function persist(){try{localStorage.setItem('prawnRealmSave',JSON.stringify({catches:state.catches.slice(-100),gear:{rod:state.rod,line:state.line,float:state.float,bait:state.bait,sound:state.sound},farm:state.farm}))}catch(e){}}
+function farmTick(){
+ const now=Date.now(), elapsed=Math.max(0,Math.min(7*24*3600*1000,now-(state.farm.lastTick||now)));
+ // Game-time growth: 1 in-game day per 3 real minutes; capped while offline.
+ const days=elapsed/180000;
+ state.farm.stock.forEach(s=>{s.age=(s.age||0)+days;s.growth=Math.min(1,(s.growth||0)+days/(s.daysToGrow||5));});
+ state.farm.lastTick=now;persist();
+}
+function openFarm(){
+ farmTick();$('modalTitle').textContent='🪸 蝦場養殖基地';$('saveGear').style.display='none';
+ renderFarm();$('modal').classList.add('open');
+}
+function renderFarm(){
+ const f=state.farm,sea=f.tankLevel>=2;
+ const ready=f.stock.filter(s=>s.growth>=1).length;
+ $('modalBody').innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b style="color:var(--gold)">🪙 ${f.cash} 蝦幣</b><div class="sub">養殖槽 Lv.${f.tankLevel} · 存量 ${f.stock.length}/${f.tankLevel*8}</div></div><div class="sub">可收成 ${ready} 隻</div></div>
+ <p>選擇品種放養、定時餵食，成長成熟後收成賣出。遊戲會在開啟養殖頁時補算離線成長。</p>
+ <div style="display:flex;gap:7px;margin-bottom:12px"><button id="feedBtn" style="flex:1">🌾 餵食（${f.feed} 份）</button><button id="upgradeBtn" style="flex:1">⬆ 升級養殖槽（${f.tankLevel>=3?'已滿級':(f.tankLevel+1)*800+' 蝦幣'}）</button></div>
+ <div class="sub" style="margin:8px 0">可養殖品種</div>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${SPECIES.map(s=>`<div style="background:#102c3b;border:1px solid #2a5061;border-radius:12px;padding:10px"><b>${s.name}</b><div class="sub">${s.kind} · ${s.weight} g/隻</div><div class="sub" style="min-height:30px">${s.desc}</div><button data-stock="${s.id}" style="width:100%;margin-top:7px" ${f.stock.length>=f.tankLevel*8||f.cash<s.price||(s.kind!=='淡水蝦'&&!sea)?'disabled':''}>放養 ${s.price} 蝦幣</button>${s.kind!=='淡水蝦'&&!sea?'<div class="sub">需 Lv.2 海水槽</div>':''}</div>`).join('')}</div>
+ <div class="sub" style="margin:14px 0 6px">養殖庫存</div>
+ ${f.stock.length?f.stock.map((s,i)=>{let sp=SPECIES.find(x=>x.id===s.id)||SPECIES[0];return `<div class="catchrow"><span>${sp.name} #${i+1}<div class="sub">成長 ${Math.round(s.growth*100)}% · 飼養 ${Math.floor(s.age||0)} 天</div></span><button data-harvest="${i}" ${s.growth<1?'disabled':''}>${s.growth>=1?'收成 '+Math.round(sp.price*1.6):'成長中'}</button></div>`}).join(''):'<p>養殖槽目前是空的，先選一種蝦或海鮮放養吧。</p>'}`;
+ $('feedBtn').onclick=()=>{if(f.feed<=0){toast('飼料不足，稍後可補充');return}f.feed--;f.stock.forEach(s=>s.growth=Math.min(1,s.growth+.08));persist();renderFarm();sound(520,.06);};
+ $('upgradeBtn').onclick=()=>{if(f.tankLevel>=3){toast('養殖槽已滿級');return}let cost=(f.tankLevel+1)*800;if(f.cash<cost){toast('蝦幣不足！先收成販售');return}f.cash-=cost;f.tankLevel++;persist();renderFarm();toast(f.tankLevel>=2?'升級成功！已解鎖海水品種':'養殖槽升級成功');};
+ $('modalBody').querySelectorAll('[data-stock]').forEach(b=>b.onclick=()=>{let sp=SPECIES.find(s=>s.id===b.dataset.stock);if(!sp||f.cash<sp.price||f.stock.length>=f.tankLevel*8)return;if(sp.kind!=='淡水蝦'&&f.tankLevel<2){toast('先升級到 Lv.2 解鎖海水槽');return}f.cash-=sp.price;f.stock.push({id:sp.id,growth:0,age:0,daysToGrow:sp.id==='ghost'?3:sp.id==='oyster'?8:sp.id==='lobster'?10:sp.id==='crab'?7:sp.id==='scallop'?6:sp.id==='fish'?8:5});persist();renderFarm();sound(660,.05);});
+ $('modalBody').querySelectorAll('[data-harvest]').forEach(b=>b.onclick=()=>{let i=Number(b.dataset.harvest),s=f.stock[i];if(!s||s.growth<1)return;let sp=SPECIES.find(x=>x.id===s.id)||SPECIES[0];f.cash+=Math.round(sp.price*1.6);f.harvested++;f.stock.splice(i,1);persist();renderFarm();toast('收成 '+sp.name+'，獲得 '+Math.round(sp.price*1.6)+' 蝦幣');sound(780,.08,'triangle');});
+}
+function sound(freq=440,dur=.08,type='sine',vol=.035){if(!state.sound)return;try{audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();let o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=freq;g.gain.value=vol;g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur)}catch(e){}}
+function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2100)}
+function setStatus(a,b){$('status').textContent=a;$('desc').textContent=b}
+function refreshStats(){$('count').textContent=state.catchCount+' 尾';$('weight').textContent=Math.round(state.totalWeight)+' g'}
+function mat(color,rough=.5,metal=0){return new THREE.MeshStandardMaterial({color,roughness:rough,metalness:metal})}
+function box(w,h,d,m,x,y,z,parent=scene){let o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);parent.add(o);return o}
+function makeShrimp(x,y,z,scale=1){
+ const g=new THREE.Group(),shell=mat(0xd87553,.38),belly=mat(0xf4b18a,.55),blue=mat(0x417fbd,.42),black=mat(0x101a22,.2);
+ let body=new THREE.Mesh(new THREE.SphereGeometry(.14*scale,12,10),shell);body.scale.set(1.5,.7,.72);g.add(body);
+ for(let i=0;i<5;i++){let seg=new THREE.Mesh(new THREE.SphereGeometry(.075*scale,10,8),i%2?shell:belly);seg.scale.set(1.1,.8,.8);seg.position.set(-.16*scale-i*.075*scale,-.005*scale,0);g.add(seg)}
+ for(let i=0;i<3;i++){let tail=new THREE.Mesh(new THREE.ConeGeometry(.055*scale,.12*scale,8),shell);tail.rotation.z=Math.PI/2;tail.position.set(-.57*scale-i*.025,0,0);g.add(tail)}
+ for(let side of [-1,1]){let eye=new THREE.Mesh(new THREE.SphereGeometry(.027*scale,8,8),black);eye.position.set(.18*scale,.05*scale,side*.075*scale);g.add(eye);
+ let claw=new THREE.Mesh(new THREE.ConeGeometry(.035*scale,.24*scale,8),blue);claw.rotation.z=-.65;claw.position.set(.32*scale,-.04*scale,side*.1*scale);g.add(claw);
+ for(let i=0;i<3;i++){let leg=new THREE.Mesh(new THREE.CylinderGeometry(.004*scale,.008*scale,.16*scale,5),shell);leg.position.set(.02*scale-i*.08*scale,-.09*scale,side*.05*scale);leg.rotation.z=.3;g.add(leg)}}
+ for(let i=0;i<2;i++){let a=new THREE.Mesh(new THREE.CylinderGeometry(.002*scale,.003*scale,.38*scale,5),shell);a.position.set(.28*scale,.14*scale,(i?1:-1)*.035*scale);a.rotation.z=.9;g.add(a)}
+ g.position.set(x,y,z);g.scale.setScalar(scale);g.userData={base:new THREE.Vector3(x,y,z),phase:Math.random()*6.28,speed:.2+Math.random()*.4};scene.add(g);shrimpGroup.push(g);return g
+}
+function init(){
+ scene=new THREE.Scene();scene.background=new THREE.Color(0x071b2a);scene.fog=new THREE.Fog(0x071b2a,8,19);
+ camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,100);camera.position.set(0,4.5,8.7);camera.lookAt(0,.3,0);
+ renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;$('scene').appendChild(renderer.domElement);
+ clock=new THREE.Clock();
+ scene.add(new THREE.HemisphereLight(0xa6e7ff,0x102536,2));
+ let light=new THREE.DirectionalLight(0xffe0bd,2.6);light.position.set(-4,8,5);light.castShadow=true;scene.add(light);
+ let fill=new THREE.PointLight(0x32b7e4,18,15);fill.position.set(3,3,0);scene.add(fill);
+ const concrete=mat(0x506a78,.88),edge=mat(0x1b3442,.7),floor=mat(0x102c3b,.25),metal=mat(0x6e8a98,.35,.65);
+ box(10,.45,7,concrete,0,-.25,0);box(9.2,.18,6.2,floor,0,-.02,0);
+ // pool walls
+ box(9.4,.55,.22,edge,0,.22,-3.1);box(9.4,.55,.22,edge,0,.22,3.1);box(.22,.55,6.2,edge,-4.6,.22,0);box(.22,.55,6.2,edge,4.6,.22,0);
+ for(let x=-4;x<=4;x+=1){box(.025,.02,6.1,mat(0x2c6172),x,.075,0)}
+ // water transparent animated plane
+ waterMat=new THREE.MeshPhysicalMaterial({color:0x087b9a,roughness:.16,metalness:.1,transparent:true,opacity:.67,clearcoat:1,clearcoatRoughness:.1});
+ water=new THREE.Mesh(new THREE.PlaneGeometry(9.15,6.05,50,35),waterMat);water.rotation.x=-Math.PI/2;water.position.y=.13;scene.add(water);
+ // water ripple rings
+ for(let i=0;i<13;i++){let ring=new THREE.Mesh(new THREE.RingGeometry(.06,.075,32),new THREE.MeshBasicMaterial({color:0x8cecff,transparent:true,opacity:.26,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set((Math.random()-.5)*8,.15,(Math.random()-.5)*5);ring.userData={phase:Math.random()*6.28};scene.add(ring);particles.push(ring)}
+ // pool tiles / ambience
+ for(let i=0;i<9;i++){let lamp=new THREE.Mesh(new THREE.SphereGeometry(.075,10,8),new THREE.MeshBasicMaterial({color:0x8befff}));lamp.position.set(-4+i, .56,-3.13);scene.add(lamp)}
+ // rod, line, bobber
+ rodGroup=new THREE.Group();let rod=new THREE.Mesh(new THREE.CylinderGeometry(.025,.045,3.1,8),mat(0x222c3e,.3,.4));rod.position.set(0,1.55,0);rod.rotation.z=-.25;rodGroup.add(rod);
+ let handle=new THREE.Mesh(new THREE.CylinderGeometry(.07,.08,.5,10),mat(0x7e4e30));handle.position.set(0,.32,0);handle.rotation.z=-.25;rodGroup.add(handle);rodGroup.position.set(2.5,0,3.7);rodGroup.rotation.x=-.25;scene.add(rodGroup);
+ let pts=[new THREE.Vector3(2.5,2.6,3.7),new THREE.Vector3(2.1,1.9,2.6),new THREE.Vector3(1.4,.4,1.4)];lineObj=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xd6faff,transparent:true,opacity:.8}));scene.add(lineObj);
+ floatObj=new THREE.Group();let f1=new THREE.Mesh(new THREE.CylinderGeometry(.025,.045,.34,8),mat(0xf4f2e8,.3));f1.position.y=.17;floatObj.add(f1);let f2=new THREE.Mesh(new THREE.CylinderGeometry(.03,.025,.11,8),mat(0xf05249,.3));f2.position.y=.35;floatObj.add(f2);let tip=new THREE.Mesh(new THREE.SphereGeometry(.028,8,8),mat(0xffd66e,.2));tip.position.y=.415;floatObj.add(tip);floatObj.position.set(1.4,.17,1.4);scene.add(floatObj);
+ // rocks / pump
+ for(let i=0;i<8;i++){let r=new THREE.Mesh(new THREE.DodecahedronGeometry(.16+Math.random()*.12,0),mat(i%2?0x3a6a75:0x536b78));r.position.set(-3.7+Math.random()*.6,.15,-2.6+Math.random()*5.2);r.scale.y=.4;scene.add(r)}
+ let pump=new THREE.Group();let cylinder=new THREE.Mesh(new THREE.CylinderGeometry(.23,.23,.65,18),metal);cylinder.position.y=.7;pump.add(cylinder);let top=new THREE.Mesh(new THREE.CylinderGeometry(.3,.3,.08,18),edge);top.position.y=1.05;pump.add(top);pump.position.set(-3.8,0,-2.3);scene.add(pump);
+ for(let i=0;i<24;i++)makeShrimp((Math.random()-.5)*7.8,.0,(Math.random()-.5)*4.8,.45+Math.random()*.55);
+ addEventListener('resize',resize);bindControls();animate();refreshStats();setStatus('準備就緒 · 蝦池水面平穩','觀察浮標，出現訊號後抓準時機揚竿。');
+}
+function resize(){if(!camera)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}
+function bindControls(){
+ const c=renderer.domElement;
+ c.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;c.setPointerCapture(e.pointerId)});
+ c.addEventListener('pointermove',e=>{if(!dragging)return;let dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;rotY+=dx*.005;rotX=Math.max(-.08,Math.min(.6,rotX+dy*.003));});
+ c.addEventListener('pointerup',()=>dragging=false);c.addEventListener('pointercancel',()=>dragging=false);
+ $('castBtn').onclick=cast; $('strikeBtn').onclick=strike; $('jigBtn').onclick=jig; $('reelBtn').onclick=reel;
+ $('gearBtn').onclick=showGear;$('logBtn').onclick=showLog;$('farmBtn').onclick=openFarm;$('closeModal').onclick=()=> $('modal').classList.remove('open');$('saveGear').onclick=saveGear;
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)persist()});
+}
+function cast(){
+ if(state.phase==='bite'||state.phase==='fight'){toast('先處理目前這一竿！');return}
+ clearTimeout(state.waitingTimer);clearTimeout(state.fightTimer);state.phase='waiting';state.tension=0;state.castAt=performance.now();
+ floatObj.position.set(.2,.16,.2);lineObj.geometry.setFromPoints([new THREE.Vector3(2.5,2.6,3.7),new THREE.Vector3(1.5,1.8,2.1),new THREE.Vector3(.2,.35,.2)]);
+ $('castBtn').textContent='重新拋竿';$('strikeBtn').disabled=true;$('jigBtn').disabled=false;$('reelBtn').disabled=true;
+ setStatus('已拋竿 · 等待蝦訊','可以輕提逗蝦，注意浮標細微點動。');toast('餌料入水，開始等訊號');sound(360,.1);
+ const delay=3500+Math.random()*8500;state.waitingTimer=setTimeout(()=>bite(),delay);
+}
+function jig(){if(state.phase!=='waiting')return;floatObj.position.y+=.045;setTimeout(()=>{if(floatObj&&state.phase==='waiting')floatObj.position.y=.16},170);sound(620,.045,'triangle',.02);toast('輕提逗蝦：餌料有了動態');if(Math.random()<.18){clearTimeout(state.waitingTimer);state.waitingTimer=setTimeout(()=>bite(),900+Math.random()*1600)}}
+function bite(){
+ if(state.phase!=='waiting')return;state.phase='bite';state.biteAt=performance.now();state.biteType=['點動','緩沉','連續下頓'][Math.floor(Math.random()*3)];
+ $('strikeBtn').disabled=false;$('reelBtn').disabled=true;
+ setStatus('⚠ 有蝦訊！'+state.biteType,'浮標正在給訊號，現在揚竿試試！');$('hint').textContent='抓準時機點「揚竿」！';$('bitePulse').style.border='5px solid #ffcf63';
+ sound(880,.12,'sine',.06);setTimeout(()=>sound(1120,.15,'sine',.05),130);navigator.vibrate?.([80,50,100]);
+ state.waitingTimer=setTimeout(()=>{if(state.phase==='bite'){state.phase='waiting';$('strikeBtn').disabled=true;$('bitePulse').style.border='0 solid transparent';setStatus('蝦訊錯過了','浮標恢復平靜，繼續等待下一次訊號。');state.waitingTimer=setTimeout(bite,2500+Math.random()*6000)}},2200);
+}
+function strike(){
+ if(state.phase!=='bite'){toast('還沒有明確蝦訊');return}
+ clearTimeout(state.waitingTimer);$('bitePulse').style.border='0 solid transparent';let reaction=performance.now()-state.biteAt;state.phase='fight';state.fish={weight:Math.round(12+Math.random()*52),quality:Math.random(),progress:0};state.tension=24+Math.random()*15;
+ if(reaction<350){state.fish.progress=.25;toast('漂亮！反應很快，成功刺中');sound(700,.08,'triangle')}else if(reaction<1200){state.fish.progress=.1;toast('刺中了！穩住拉力')}else{state.fish.progress=-.1;toast('有點晚，但還有機會')}
+ $('strikeBtn').disabled=true;$('reelBtn').disabled=false;$('jigBtn').disabled=true;$('castBtn').disabled=true;
+ setStatus('中蝦！進入搏蝦','點按「收線」控制拉力；拉力過高會斷線。');$('hint').textContent='收線控制拉力，別讓拉力表爆紅';sound(500,.1,'sawtooth',.04);
+ state.fightTimer=setInterval(fightTick,250);
+}
+function fightTick(){
+ if(state.phase!=='fight')return;
+ const pull=8+Math.random()*18;state.tension=Math.max(0,Math.min(110,state.tension+(Math.random()-.42)*pull));
+ if(state.tension>88){state.phase='waiting';clearInterval(state.fightTimer);state.fish=null;state.tension=0;setStatus('脫鉤了！','拉力太大，放鬆一點再試試。');finishFight();sound(140,.22,'sawtooth');toast('線組承受不住，蝦跑掉了！');return}
+ if(state.tension<8)state.fish.progress-=.012;else state.fish.progress+=.018+(state.tension<65?.008:0);
+ if(state.fish.progress>=1){landPrawn();return}
+ $('tensionBar').style.width=state.tension+'%';$('tensionText').textContent=state.tension>75?'危險':state.tension>55?'偏緊':state.tension<18?'太鬆':'穩定';
+}
+function reel(){
+ if(state.phase!=='fight')return;
+ // Each tap tightens line briefly, with a cooldown-like natural relaxation.
+ state.tension=Math.min(105,state.tension+13);state.fish.progress+=.14;sound(430,.05,'triangle',.025);
+ $('tensionBar').style.width=state.tension+'%';$('tensionText').textContent=state.tension>75?'危險':'收線中';
+ if(state.tension>88){clearInterval(state.fightTimer);state.phase='waiting';state.fish=null;state.tension=0;finishFight();setStatus('斷線跑蝦','收線過猛，下一竿換更耐拉的線吧。');toast('斷線了！');return}
+ if(state.fish.progress>=1)landPrawn();
+}
+function landPrawn(){
+ clearInterval(state.fightTimer);let f=state.fish;state.phase='idle';state.catchCount++;state.totalWeight+=f.weight;
+ let record={name:f.weight>52?'巨型泰國蝦':f.weight>35?'大公蝦':Math.random()>.45?'泰國公蝦':'泰國母蝦',weight:f.weight,time:new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}),rod:state.rod,bait:state.bait};
+ state.catches.unshift(record);state.farm.cash+=Math.max(15,Math.round(record.weight*1.2));state.fish=null;persist();refreshStats();finishFight();setStatus('成功起蝦！ '+record.name,'本尾 '+record.weight+' g · 配備 '+state.rod+' / '+state.bait);toast('🎉 起蝦成功！ '+record.name+' '+record.weight+' g');sound(740,.1,'triangle',.05);setTimeout(()=>sound(990,.14,'triangle',.05),100);
+ // small animated splash
+ for(let i=0;i<7;i++){let s=new THREE.Mesh(new THREE.SphereGeometry(.035,7,6),new THREE.MeshBasicMaterial({color:0x9af5ff}));s.position.set(.2,.25,.2);scene.add(s);let v=new THREE.Vector3((Math.random()-.5)*2,Math.random()*2,(Math.random()-.5)*2);let start=performance.now();let tick=()=>{let t=(performance.now()-start)/500;s.position.addScaledVector(v,.025);v.y-=.02;if(t<1)requestAnimationFrame(tick);else scene.remove(s)};tick()}
+}
+function finishFight(){$('castBtn').disabled=false;$('strikeBtn').disabled=true;$('jigBtn').disabled=true;$('reelBtn').disabled=true;$('tensionBar').style.width='8%';$('tensionText').textContent='安全';$('hint').textContent='拖曳旋轉視角 · 點「拋竿」開始';}
+function showGear(){
+ $('modalTitle').textContent='🎣 裝備配置';$('saveGear').style.display='block';
+ $('modalBody').innerHTML=`<p>裝備會影響搏蝦時的操作手感。選好後套用並開始下一竿。</p>
+ <div class="sub">釣竿</div><select id="gRod" style="max-width:100%;width:100%;margin:5px 0 12px"><option>軟調 7/3</option><option>中硬調 6/4</option><option>硬調 5/5</option></select>
+ <div class="sub">母線</div><select id="gLine" style="max-width:100%;width:100%;margin:5px 0 12px"><option>尼龍 1.0 號</option><option>尼龍 1.5 號</option><option>碳纖 2.0 號</option></select>
+ <div class="sub">浮標</div><select id="gFloat" style="max-width:100%;width:100%;margin:5px 0 12px"><option>敏感長標</option><option>短身頓標</option><option>夜光電子標</option></select>
+ <div class="sub">釣餌</div><select id="gBait" style="max-width:100%;width:100%;margin:5px 0 12px"><option>赤尾青</option><option>雞肝</option><option>蝦肉</option><option>魚腸</option></select>
+ <label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input id="gSound" type="checkbox" ${state.sound?'checked':''}> 開啟提示音與音效</label>`;
+ $('gRod').value=state.rod;$('gLine').value=state.line;$('gFloat').value=state.float;$('gBait').value=state.bait;$('modal').classList.add('open');
+}
+function saveGear(){state.rod=$('gRod').value;state.line=$('gLine').value;state.float=$('gFloat').value;state.bait=$('gBait').value;state.sound=$('gSound').checked;persist();$('modal').classList.remove('open');toast('裝備已套用並自動保存');}
+function showLog(){
+ $('modalTitle').textContent='🦐 漁獲紀錄';$('saveGear').style.display='none';
+ let total=state.catches.reduce((s,c)=>s+c.weight,0);
+ $('modalBody').innerHTML=`<p>本機自動保存 · 共 ${state.catches.length} 尾 / ${Math.round(total)} g</p>`+(state.catches.length?state.catches.slice(0,40).map((c,i)=>`<div class="catchrow"><span>${i+1}. ${c.name}<div class="sub">${c.time} · ${c.bait||''}</div></span><strong style="color:var(--gold)">${c.weight} g</strong></div>`).join(''):'<p>還沒有漁獲，拋出第一竿吧！')+`<div style="margin-top:14px"><button id="clearLog" style="width:100%">清除漁獲紀錄</button></div>`;
+ $('modal').classList.add('open');$('clearLog').onclick=()=>{if(confirm('確定清除所有漁獲紀錄？')){state.catches=[];state.catchCount=0;state.totalWeight=0;persist();refreshStats();showLog()}};
+}
+function animate(){
+ requestAnimationFrame(animate);let t=clock.getElapsedTime();
+ // subtle waves
+ const p=water.geometry.attributes.position;for(let i=0;i<p.count;i++){let x=p.getX(i),y=p.getY(i);p.setZ(i,.025*Math.sin(x*2.4+t*1.2)*Math.cos(y*2.8-t*.9)+.012*Math.sin(x*5+t));}p.needsUpdate=true;water.geometry.computeVertexNormals();
+ particles.forEach((r,i)=>{let s=.6+((t*.22+r.userData.phase)%1)*2.2;r.scale.setScalar(s);r.material.opacity=.22*(1-(s-.6)/2.2)});
+ shrimpGroup.forEach((g,i)=>{let d=g.userData;g.position.x=d.base.x+Math.sin(t*d.speed+d.phase)*.18;g.position.z=d.base.z+Math.cos(t*d.speed*.7+d.phase)*.13;g.position.y=d.base.y+.035*Math.sin(t*2+d.phase);g.rotation.y=Math.sin(t*d.speed+d.phase)*.22;});
+ if(state.phase==='bite'){floatObj.position.y=.14+Math.sin(t*22)*.035;floatObj.rotation.z=Math.sin(t*17)*.06}
+ if(state.phase==='waiting'){floatObj.position.y=.16+Math.sin(t*2.5)*.012;floatObj.rotation.z=Math.sin(t*2)*.018}
+ if(state.phase==='fight'){floatObj.position.y=.12+Math.sin(t*10)*.025}
+ // camera orbit based on drag
+ const target=new THREE.Vector3(Math.sin(rotY)*8.8,3.4+rotX*2,Math.cos(rotY)*8.8);camera.position.lerp(target,.035);camera.lookAt(0,.1,0);
+ renderer.render(scene,camera);
+}
+init();
+</script>
+</body>
+</html>
